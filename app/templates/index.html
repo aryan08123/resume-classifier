@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Resume Classifier</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Sora:wght@600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<div class="bg" aria-hidden="true"><i class="orb o1"></i><i class="orb o2"></i><i class="orb o3"></i></div>
+<main class="wrap">
+  <header class="hero">
+    <h1>Turn any resume into a role, a skill list and a match score.</h1>
+    <p>An NLP pipeline that predicts the best-fit job role, extracts skills, and compares a resume with a job description.</p>
+    <ul class="pills"><li>TF-IDF</li><li>Linear SVM</li><li>Skill extraction</li><li>Cosine similarity</li></ul>
+  </header>
+
+  <div class="layout">
+    <section class="panel glass" aria-label="Analyze a resume">
+      <form id="analyze-form" method="post" enctype="multipart/form-data" novalidate>
+        <div class="field">
+          <div class="lbl">Resume file <span class="hint">PDF or TXT, up to 2 MB</span></div>
+          <label class="dropzone" id="dropzone" for="resume_file">
+            <input class="sr" type="file" id="resume_file" name="resume_file" accept=".pdf,.txt">
+            <div class="dz-idle">
+              <svg viewBox="0 0 24 24" width="38" height="38" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4m0 0L7 9m5-5l5 5"/><path d="M4 16v3a1 1 0 001 1h14a1 1 0 001-1v-3"/></svg>
+              <strong>Drag and drop your resume</strong>
+              <span>or click to browse your files</span>
+            </div>
+            <div class="dz-file" hidden>
+              <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8z"/><path d="M14 3v5h5"/></svg>
+              <div><div class="dz-name"></div><div class="dz-size"></div></div>
+              <button type="button" id="dz-remove" class="dz-remove" aria-label="Remove file">&times;</button>
+            </div>
+          </label>
+          <p class="dz-msg" id="dz-msg" role="status"></p>
+        </div>
+
+        <div class="field">
+          <label class="lbl" for="resume_text">Or paste resume text <span class="hint" id="word-count">0 words</span></label>
+          <textarea id="resume_text" name="resume_text" placeholder="Paste the resume text here (at least 20 words)"></textarea>
+        </div>
+
+        <div class="field">
+          <label class="lbl" for="job_description">Job description (optional) <span class="hint">adds a match score</span></label>
+          <textarea id="job_description" name="job_description" placeholder="Paste a job description to see matched and missing skills"></textarea>
+        </div>
+
+        <p class="client-error" id="client-error" role="alert" hidden></p>
+
+        <div class="actions">
+          <button type="submit" class="btn btn-primary" id="submit-btn"><span class="btn-label">Analyze resume</span><span class="spinner" aria-hidden="true"></span></button>
+          <button type="button" class="btn btn-ghost" id="clear-btn">Clear form</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="results" id="results" aria-live="polite">
+      {% if error %}<div class="alert glass" role="alert">{{ error }}</div>{% endif %}
+
+      {% if result %}
+      <article class="card glass tilt" style="--d:0ms">
+        <h2 class="card-title">Predicted role</h2>
+        <p class="role-main">{{ result.roles[0] }}</p>
+        {% if result.roles|length > 1 %}
+        <div class="alt"><span>Also close</span>
+          {% for r in result.roles[1:] %}<b class="chip">{{ r }}</b>{% endfor %}
+        </div>
+        {% endif %}
+      </article>
+
+      <article class="card glass tilt" style="--d:120ms">
+        <h2 class="card-title">Detected skills <span class="badge">{{ result.skills|length }}</span></h2>
+        <div class="tags">
+          {% for s in result.skills %}<span class="tag">{{ s }}</span>
+          {% else %}<p class="muted">No known skills detected.</p>{% endfor %}
+        </div>
+      </article>
+
+      {% if result.match %}
+      <article class="card glass tilt" style="--d:240ms">
+        <h2 class="card-title">Job match</h2>
+        <div class="match">
+          <div class="ring" style="--pct: {{ result.match.overall|int }}%;">
+            <svg viewBox="0 0 120 120" aria-hidden="true">
+              <defs><linearGradient id="rg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8b6cff"/><stop offset="1" stop-color="#22d3ee"/></linearGradient></defs>
+              <circle class="r-track" cx="60" cy="60" r="52"/><circle class="r-bar" cx="60" cy="60" r="52"/>
+            </svg>
+            <div class="r-text"><span><span class="count" data-value="{{ result.match.overall }}">{{ result.match.overall }}</span>%</span><small>overall</small></div>
+          </div>
+          <div class="bars">
+            <div><div class="b-row"><span>Skill match</span><span>{{ result.match.skill_match }}%</span></div><div class="bar"><span style="--w: {{ result.match.skill_match }}%;"></span></div></div>
+            <div><div class="b-row"><span>Text similarity</span><span>{{ result.match.text_similarity }}%</span></div><div class="bar"><span style="--w: {{ result.match.text_similarity }}%;"></span></div></div>
+            <p class="muted small">Overall is 60% skill match plus 40% text similarity.</p>
+          </div>
+        </div>
+        <div class="sub">Matched skills</div>
+        <div class="tags">{% for s in result.match.matched_skills %}<span class="tag ok">{{ s }}</span>{% else %}<span class="muted">None</span>{% endfor %}</div>
+        <div class="sub">Missing skills</div>
+        <div class="tags">{% for s in result.match.missing_skills %}<span class="tag miss">{{ s }}</span>{% else %}<span class="muted">None</span>{% endfor %}</div>
+      </article>
+      {% endif %}
+      {% else %}
+      <article class="card glass empty">
+        <h2 class="card-title">Your analysis will appear here</h2>
+        <ol class="steps">
+          <li><b>Add a resume</b><span>Upload a PDF or TXT file, or paste the text.</span></li>
+          <li><b>Add a job description</b><span>Optional. Needed for the match score and missing skills.</span></li>
+          <li><b>Read the results</b><span>Likely roles, detected skills and how well the resume fits.</span></li>
+        </ol>
+      </article>
+      {% endif %}
+    </section>
+  </div>
+  <footer class="foot">Built with Flask, scikit-learn and NLTK.</footer>
+</main>
+<script src="{{ url_for('static', filename='script.js') }}" defer></script>
+</body>
+</html>
